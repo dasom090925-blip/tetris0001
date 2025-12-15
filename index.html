@@ -1,376 +1,53 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>모바일 통합 테트리스</title>
+// 7. 행 클리어 로직 (수정된 버전)
+function checkRowForClear() {
+    let linesCleared = 0;
     
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background-color: #333;
-            color: white;
-            font-family: Arial, sans-serif;
-            user-select: none; /* 모바일에서 드래그 선택 방지 */
-            padding: 20px 0;
-        }
-
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background: #222;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
-        }
-
-        #grid {
-            width: 200px; /* 10칸 * 20px */
-            height: 400px; /* 20칸 * 20px */
-            display: grid;
-            grid-template-columns: repeat(10, 1fr); 
-            border: 3px solid #ccc;
-            background-color: #000;
-        }
-
-        /* 각 블록/셀 스타일 */
-        .square {
-            width: 100%;
-            height: 100%;
-            box-sizing: border-box;
-            border: 1px solid #111;
-        }
-
-        .taken {
-            border: none;
-            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        /* --- 모바일 컨트롤 스타일 --- */
-        #controls {
-            display: grid;
-            grid-template-areas: 
-                ". rotate ."
-                "left down right";
-            gap: 10px;
-            margin-top: 20px;
-            width: 300px;
-        }
-
-        #rotate-btn { grid-area: rotate; }
-        #left-btn { grid-area: left; }
-        #right-btn { grid-area: right; }
-        #down-btn { grid-area: down; }
-
-        #controls button, #start-btn {
-            padding: 15px;
-            font-size: 24px;
-            cursor: pointer;
-            background-color: #555;
-            color: white;
-            border: 1px solid #777;
-            border-radius: 5px;
-            min-width: 70px; 
-            min-height: 70px;
-            transition: background-color 0.1s;
-        }
+    // Grid를 맨 위(0)부터가 아니라, 맨 아래(width * height - width)부터 확인합니다.
+    for (let i = width * height - width; i >= 0; i -= width) {
         
-        #start-btn {
-            margin-top: 15px;
-            padding: 10px 20px;
-            font-size: 18px;
-            min-width: unset;
-            min-height: unset;
-        }
-
-        #controls button:active, #start-btn:active {
-            background-color: #777;
-        }
-    </style>
-</head>
-<body>
-    <div id="game-container">
-        <h1>Tetris!</h1>
-        <div id="score-display">Score: 0</div>
+        // 현재 검사 중인 행의 인덱스들
+        const row = Array.from({ length: width }, (_, k) => i + k);
         
-        <div id="grid"></div>
+        // 현재 행이 모두 'taken' 클래스를 가졌는지 확인
+        const isRowFull = row.every(index => squares[index].classList.contains('taken'));
         
-        <div id="controls">
-            <button id="rotate-btn">🔄 Rotate</button>
-            <button id="left-btn">◀️ Left</button>
-            <button id="right-btn">▶️ Right</button>
-            <button id="down-btn">⬇️ Soft Drop</button>
-        </div>
-        
-        <button id="start-btn">Start Game</button>
-        <div id="game-over-message" class="hidden" style="color: red; font-size: 24px; margin-top: 10px;">
-            GAME OVER!
-        </div>
-    </div>
-
-    <script>
-        // 게임 설정
-        const width = 10;
-        const height = 20;
-        const grid = document.getElementById('grid');
-        const squares = [];
-        let currentPosition = 4;
-        let score = 0;
-        let timerId = null;
-        const scoreDisplay = document.getElementById('score-display');
-        const startBtn = document.getElementById('start-btn');
-        const gameOverMsg = document.getElementById('game-over-message');
-
-        // 1. Grid 생성
-        function createGrid() {
-            for (let i = 0; i < width * height; i++) {
-                const square = document.createElement('div');
-                square.classList.add('square');
-                grid.appendChild(square);
-                squares.push(square);
-            }
-        }
-        createGrid();
-
-        // 2. 테트로미노 모양 정의
-        // [모양 0], [모양 1], [모양 2], [모양 3]
-        const lBlock = [
-            [1, width + 1, width * 2 + 1, 2],
-            [width, width + 1, width + 2, width * 2 + 2],
-            [1, width + 1, width * 2 + 1, width * 2],
-            [width, width * 2, width * 2 + 1, width * 2 + 2]
-        ];
-
-        const zBlock = [
-            [width, width + 1, 2 * width + 1, 2 * width + 2],
-            [1, width, width + 1, 2 * width],
-            [width, width + 1, 2 * width + 1, 2 * width + 2],
-            [1, width, width + 1, 2 * width]
-        ];
-
-        const tBlock = [
-            [1, width, width + 1, width + 2],
-            [1, width + 1, width * 2 + 1, width],
-            [width, width + 1, width + 2, width * 2 + 1],
-            [1, width + 1, width * 2 + 1, width * 2 + 2]
-        ];
-        
-        const oBlock = [
-            [0, 1, width, width + 1]
-        ];
-
-        const iBlock = [
-            [1, width + 1, width * 2 + 1, width * 3 + 1],
-            [width, width + 1, width + 2, width + 3],
-            [1, width + 1, width * 2 + 1, width * 3 + 1],
-            [width, width + 1, width + 2, width + 3]
-        ];
-
-
-        const theTetrominoes = [lBlock, zBlock, tBlock, oBlock, iBlock];
-        const colors = ['orange', 'red', 'purple', 'yellow', 'cyan'];
-
-        // 현재 블록 초기화
-        let random = Math.floor(Math.random() * theTetrominoes.length);
-        let nextRandom = Math.floor(Math.random() * theTetrominoes.length);
-        let currentRotation = 0;
-        let current = theTetrominoes[random][currentRotation];
-        let currentColor = colors[random];
-
-        // 3. 블록 그리기
-        function draw() {
-            current.forEach(index => {
-                squares[currentPosition + index].classList.add('block');
-                squares[currentPosition + index].style.backgroundColor = currentColor;
+        if (isRowFull) {
+            linesCleared++;
+            
+            // 1. 해당 행의 모든 클래스와 스타일 제거 (화면에서 사라짐)
+            row.forEach(index => {
+                squares[index].classList.remove('taken', 'block');
+                squares[index].style.backgroundColor = '';
             });
-        }
-
-        // 4. 블록 지우기
-        function undraw() {
-            current.forEach(index => {
-                squares[currentPosition + index].classList.remove('block');
-                squares[currentPosition + index].style.backgroundColor = '';
-            });
-        }
-        
-        function isAtBottom(index) {
-            return index + width >= width * height;
-        }
-
-        // 5. 아래로 이동 (메인 게임 루프)
-        function moveDown() {
-            undraw();
-            // 충돌 감지: 다음 위치가 바닥(grid.length)을 넘어서거나, 이미 'taken' 블록이 있는 경우
-            const isCollision = current.some(index => 
-                isAtBottom(currentPosition + index) || 
-                squares[currentPosition + index + width].classList.contains('taken')
-            );
             
-            if (!isCollision) {
-                currentPosition += width;
-            } else {
-                freeze(); // 충돌 발생: 블록을 멈추고 새로운 블록 생성
-            }
-            draw();
-        }
-
-        // 6. 블록 멈추기 (Freeze) 및 새 블록 생성
-        function freeze() {
-            // 모든 블록이 멈췄음을 표시
-            current.forEach(index => squares[currentPosition + index].classList.add('taken'));
-            
-            checkRowForClear();
-            
-            // 새 블록 생성 준비 (Next Random 사용)
-            random = nextRandom;
-            nextRandom = Math.floor(Math.random() * theTetrominoes.length);
-            currentRotation = 0;
-            current = theTetrominoes[random][currentRotation];
-            currentColor = colors[random];
-            currentPosition = 4;
-            
-            // 게임 오버 확인: 새로운 블록이 시작하자마자 겹치는 경우 (4번째 줄에 taken이 있으면)
-            if (current.some(index => squares[currentPosition + index].classList.contains('taken'))) {
-                clearInterval(timerId);
-                timerId = null;
-                gameOverMsg.classList.remove('hidden');
-                startBtn.textContent = 'Restart Game';
-            }
-            // draw()는 moveDown에서 처리되거나, freeze 직후 draw()를 호출해야 함
-        }
-
-        // 7. 행 클리어 로직
-        function checkRowForClear() {
-            for (let i = 0; i < width * height; i += width) {
-                const row = Array.from({ length: width }, (_, k) => i + k); // 현재 행의 인덱스 배열
+            // 2. 위의 모든 블록을 한 칸씩 아래로 내리는 작업
+            // (i - 1)부터 맨 위(0)까지 역순으로 반복합니다.
+            for (let j = i - 1; j >= 0; j--) {
+                const squareBelow = squares[j + width]; // 바로 아래 칸
+                const currentSquare = squares[j];       // 현재 칸
                 
-                const isRowFull = row.every(index => squares[index].classList.contains('taken'));
-                
-                if (isRowFull) {
-                    score += 10;
-                    scoreDisplay.textContent = `Score: ${score}`;
+                // 현재 칸이 'taken' 상태면, 그 정보를 아래 칸으로 복사합니다.
+                if (currentSquare.classList.contains('taken')) {
+                    // 클래스/스타일 복사
+                    squareBelow.classList.add('taken', 'block');
+                    squareBelow.style.backgroundColor = currentSquare.style.backgroundColor;
                     
-                    // 1. 행 지우기 및 taken 제거
-                    row.forEach(index => {
-                        squares[index].classList.remove('taken', 'block');
-                        squares[index].style.backgroundColor = '';
-                    });
-                    
-                    // 2. 위의 모든 블록을 한 칸씩 아래로 내리기
-                    const squaresRemoved = squares.splice(i, width); // 제거된 행 (10개)
-                    squares.splice(0, 0, ...squaresRemoved); // 제거된 행을 맨 위(0번 인덱스)에 추가
-                    
-                    // 3. Grid 업데이트 (DOM 요소 교체)
-                    squares.forEach(square => grid.appendChild(square));
+                    // 현재 칸 비우기 (위에서 아래로 이동했으므로)
+                    currentSquare.classList.remove('taken', 'block');
+                    currentSquare.style.backgroundColor = '';
                 }
             }
-        }
-
-        // --- 8. 이동 및 회전 함수 ---
-        
-        function moveLeft() {
-            if (!timerId) return; // 게임 일시정지 상태면 작동 안 함
-            undraw();
-            const isAtLeftEdge = current.some(index => (currentPosition + index) % width === 0);
-            if (!isAtLeftEdge) currentPosition -= 1;
-            // 이동 후 다른 블록에 겹쳐졌는지 확인 후 겹쳤다면 다시 오른쪽으로 복구
-            if (current.some(index => squares[currentPosition + index].classList.contains('taken'))) {
-                currentPosition += 1;
-            }
-            draw();
-        }
-
-        function moveRight() {
-            if (!timerId) return;
-            undraw();
-            const isAtRightEdge = current.some(index => (currentPosition + index) % width === width - 1);
-            if (!isAtRightEdge) currentPosition += 1;
-            if (current.some(index => squares[currentPosition + index].classList.contains('taken'))) {
-                currentPosition -= 1;
-            }
-            draw();
-        }
-
-        function rotate() {
-            if (!timerId) return;
-            undraw();
             
-            const originalRotation = currentRotation;
-            currentRotation = (currentRotation + 1) % theTetrominoes[random].length;
-            current = theTetrominoes[random][currentRotation];
-
-            // 회전 후 벽 통과 여부 및 충돌 체크 (단순 구현)
-            const isRotatedIntoWall = current.some(index => 
-                (currentPosition + index) % width === width - 1 && 
-                (currentPosition + index + width) % width === 0
-            );
-
-            if (isRotatedIntoWall || current.some(index => squares[currentPosition + index].classList.contains('taken'))) {
-                // 회전 취소
-                currentRotation = originalRotation;
-                current = theTetrominoes[random][currentRotation];
-            }
-            draw();
+            // 행을 클리어했으므로, 다시 현재 i 위치부터 검사하도록 i 값을 조정하지 않습니다.
+            // (이전에 클리어한 행 때문에 새로운 행이 이 위치로 내려왔을 수 있기 때문)
+            i += width; 
         }
-
-        // 9. 모바일 버튼 이벤트 리스너 연결
-        document.getElementById('left-btn').addEventListener('click', moveLeft);
-        document.getElementById('right-btn').addEventListener('click', moveRight);
-        document.getElementById('down-btn').addEventListener('click', moveDown); // soft drop
-        document.getElementById('rotate-btn').addEventListener('click', rotate);
-        
-        // 키보드 이벤트 (PC 테스트용)
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') moveLeft();
-            else if (e.key === 'ArrowRight') moveRight();
-            else if (e.key === 'ArrowDown') moveDown();
-            else if (e.key === 'ArrowUp') rotate();
-        });
-
-
-        // 10. 게임 시작/재시작
-        function startGame() {
-            if (timerId) {
-                // 게임 일시정지
-                clearInterval(timerId);
-                timerId = null;
-                startBtn.textContent = 'Resume Game';
-            } else {
-                // 게임 시작 또는 재개
-                if (gameOverMsg.classList.contains('hidden') === false) {
-                    // Game Over 상태에서 재시작 로직 (초기화)
-                    squares.forEach(s => {
-                       s.classList.remove('block', 'taken');
-                       s.style.backgroundColor = '';
-                    });
-                    score = 0;
-                    scoreDisplay.textContent = 'Score: 0';
-                    gameOverMsg.classList.add('hidden');
-                    
-                    // 초기 블록 다시 설정 (freeze()에서 nextRandom을 사용했기 때문에 random도 초기화 필요)
-                    random = Math.floor(Math.random() * theTetrominoes.length);
-                    nextRandom = Math.floor(Math.random() * theTetrominoes.length);
-                    current = theTetrominoes[random][currentRotation];
-                    currentColor = colors[random];
-                    currentPosition = 4;
-                }
-
-                draw();
-                timerId = setInterval(moveDown, 1000); // 1초마다 하강 속도
-                startBtn.textContent = 'Pause Game';
-            }
-        }
-        
-        startBtn.addEventListener('click', startGame);
-    </script>
-</body>
-</html>
+    }
+    
+    // 점수 업데이트
+    if (linesCleared > 0) {
+        // 클리어한 줄 수에 따라 점수 부여 (테트리스 방식)
+        score += linesCleared === 4 ? 800 : linesCleared * 100;
+        scoreDisplay.textContent = `Score: ${score}`;
+    }
+}
