@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>테트리스 - 일시정지 완벽수정</title>
+    <title>테트리스 - 초기화 모드</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
             min-height: 100vh; margin: 0; background-color: #222;
             color: white; font-family: sans-serif; user-select: none; touch-action: manipulation;
         }
-        #game-container { display: flex; flex-direction: column; align-items: center; background: #333; padding: 20px; border-radius: 15px; }
+        #game-container { display: flex; flex-direction: column; align-items: center; background: #333; padding: 20px; border-radius: 15px; position: relative; }
         #score-display { font-size: 24px; margin-bottom: 10px; color: #2ecc71; }
         #grid {
             width: 200px; height: 400px; display: grid;
@@ -31,7 +31,7 @@
             background-color: #27ae60; font-weight: bold; border-radius: 10px; 
             border: none; color: white; cursor: pointer; font-size: 16px;
         }
-        .paused { opacity: 0.5; } /* 일시정지 시 그리드 반투명 효과 */
+        .paused { opacity: 0.4; }
     </style>
 </head>
 <body>
@@ -72,7 +72,6 @@
 
             let squares = Array.from(document.querySelectorAll('.square'));
 
-            // 블록 데이터
             const lTetromino = [[1, width+1, width*2+1, 2], [width, width+1, width+2, width*2+2], [1, width+1, width*2+1, width*2], [width, width*2, width*2+1, width*2+2]];
             const zTetromino = [[width+1, width+2, width*2, width*2+1], [0, width, width+1, width*2+1], [width+1, width+2, width*2, width*2+1], [0, width, width+1, width*2+1]];
             const tTetromino = [[1, width, width+1, width+2], [1, width+1, width+2, width*2+1], [width, width+1, width+2, width*2+1], [1, width, width+1, width*2+1]];
@@ -80,10 +79,12 @@
             const iTetromino = [[1, width+1, width*2+1, width*3+1], [width, width+1, width+2, width+3], [1, width+1, width*2+1, width*3+1], [width, width+1, width+2, width+3]];
 
             const theTetrominoes = [lTetromino, zTetromino, tTetromino, oTetromino, iTetromino];
+            
             let random = Math.floor(Math.random() * theTetrominoes.length);
             let currentRotation = 0;
             let current = theTetrominoes[random][currentRotation];
             let currentPosition = 4;
+            let isGameOver = false;
 
             function draw() {
                 current.forEach(index => squares[currentPosition + index].classList.add('tetromino'));
@@ -93,7 +94,7 @@
             }
 
             function moveDown() {
-                if (!timerId) return; // 타이머가 없으면(정지상태) 실행 안함
+                if (!timerId || isGameOver) return;
                 undraw();
                 currentPosition += width;
                 draw();
@@ -109,12 +110,12 @@
                     currentPosition = 4;
                     addScore();
                     draw();
-                    gameOver();
+                    checkGameOver();
                 }
             }
 
             function moveLeft() {
-                if (!timerId) return;
+                if (!timerId || isGameOver) return;
                 undraw();
                 const isAtLeftEdge = current.some(index => (currentPosition + index) % width === 0);
                 if(!isAtLeftEdge) currentPosition -= 1;
@@ -123,7 +124,7 @@
             }
 
             function moveRight() {
-                if (!timerId) return;
+                if (!timerId || isGameOver) return;
                 undraw();
                 const isAtRightEdge = current.some(index => (currentPosition + index) % width === width - 1);
                 if(!isAtRightEdge) currentPosition += 1;
@@ -132,7 +133,7 @@
             }
 
             function rotate() {
-                if (!timerId) return;
+                if (!timerId || isGameOver) return;
                 undraw();
                 const oldRotation = currentRotation;
                 currentRotation = (currentRotation + 1) % current.length;
@@ -164,30 +165,37 @@
                 }
             }
 
-            function gameOver() {
+            // 게임 오버 확인 로직 (종료 후 처음으로 돌아감)
+            function checkGameOver() {
                 if(current.some(index => squares[currentPosition + index].classList.contains('taken'))) {
                     clearInterval(timerId);
                     timerId = null;
-                    startBtn.innerHTML = "다시 시작하기";
-                    if(confirm("게임 오버! 다시 시작하시겠습니까?")) resetGame();
+                    isGameOver = true;
+                    alert("게임 종료! 최종 점수: " + score);
+                    returnToStart();
                 }
             }
 
-            function resetGame() {
+            // --- [핵심 추가] 초기 상태로 되돌리는 함수 ---
+            function returnToStart() {
+                // 1. 모든 블록 제거
                 squares.forEach(square => square.classList.remove('tetromino', 'taken'));
+                
+                // 2. 바닥 경계선 재설정
                 for(let i = 200; i < 210; i++) squares[i].classList.add('taken');
-                score = 0; scoreDisplay.innerHTML = score;
+                
+                // 3. 변수 초기화
+                score = 0;
+                scoreDisplay.innerHTML = score;
                 currentPosition = 4;
-                random = Math.floor(Math.random() * theTetrominoes.length);
-                current = theTetrominoes[random][0];
-                draw();
-                if(timerId) clearInterval(timerId);
-                timerId = setInterval(moveDown, 1000);
-                startBtn.innerHTML = "일시정지";
-                grid.classList.remove('paused');
+                isGameOver = false; // 상태 해제
+                
+                // 4. 버튼 상태 변경
+                startBtn.innerHTML = "새 게임 시작";
+                grid.classList.add('paused');
             }
 
-            // --- 수정된 시작/일시정지 로직 ---
+            // 시작/정지 버튼 로직
             startBtn.addEventListener('click', () => {
                 if (timerId) {
                     // 실행 중 -> 일시정지
@@ -196,7 +204,7 @@
                     startBtn.innerHTML = "계속하기";
                     grid.classList.add('paused');
                 } else {
-                    // 정지 중 -> 실행
+                    // 정지 중 -> 게임 실행 (처음부터 혹은 계속하기)
                     draw();
                     timerId = setInterval(moveDown, 1000);
                     startBtn.innerHTML = "일시정지";
